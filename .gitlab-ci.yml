@@ -1,0 +1,56 @@
+image: docker:latest
+services:
+  - docker:dind
+stages:
+  - build_app
+  - test
+  - build_image
+  - release_image
+before_script:
+  - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN $CI_REGISTRY
+variables:
+  MAVEN_OPTS: "-Dmaven.repo.local=/cache/maven.repository"
+build_mvn:
+  stage: build_app
+  image: maven:3-jdk-8
+  before_script: []
+  script:
+    - mvn package -U
+  artifacts:
+    paths:
+    - ai-server-first/target/*.war
+    - ai-server-first/target/*.jar
+build:
+  stage: build_image
+  script:
+    - export
+    - docker build --pull -t $CI_REGISTRY_IMAGE:$CI_BUILD_REF .
+    - docker push $CI_REGISTRY_IMAGE:$CI_BUILD_REF
+  except:
+    - tags
+test1:
+  services: []
+  before_script: []
+  stage: test
+  script:
+    - echo "test1"
+  except:
+    - tags
+# Non-master branches and tags will be released with :<ref_name> as the tag
+release-by-name:
+  stage: release_image
+  script:
+    - docker pull $CI_REGISTRY_IMAGE:$CI_BUILD_REF
+    - docker tag $CI_REGISTRY_IMAGE:$CI_BUILD_REF $CI_REGISTRY_IMAGE:$CI_BUILD_REF_NAME
+    - docker push $CI_REGISTRY_IMAGE:$CI_BUILD_REF
+  except:
+    - master
+# Master will be released with :latest as the tag
+release-master:
+  stage: release_image
+  script:
+    - docker pull $CI_REGISTRY_IMAGE:$CI_BUILD_REF
+    - docker tag $CI_REGISTRY_IMAGE:$CI_BUILD_REF $CI_REGISTRY_IMAGE:latest
+    - docker push $CI_REGISTRY_IMAGE:latest
+  only:
+    - master
